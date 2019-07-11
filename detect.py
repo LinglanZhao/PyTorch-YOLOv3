@@ -86,7 +86,7 @@ if __name__ == "__main__":
 
         # Save image and detections
         imgs.extend(img_paths)
-        img_detections.extend(detections) # a list of detected results of shape (num_detected, 4+2) for each image 
+        img_detections.extend(detections) # a list of detected results of shape (num_detected, 5+2) for each image 
 
     # Bounding-box colors
     cmap = plt.get_cmap("tab20b")
