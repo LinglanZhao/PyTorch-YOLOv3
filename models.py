@@ -17,7 +17,7 @@ def create_modules(module_defs):
     """
     Constructs module list of layer blocks from module configuration in module_defs
     """
-    hyperparams = module_defs.pop(0)
+    hyperparams = module_defs.pop(0) # the first element of module_defs is hyperparameters
     output_filters = [int(hyperparams["channels"])]
     module_list = nn.ModuleList()
     for module_i, module_def in enumerate(module_defs):
@@ -80,7 +80,7 @@ def create_modules(module_defs):
         module_list.append(modules)
         output_filters.append(filters)
 
-    return hyperparams, module_list
+    return hyperparams, module_list # return the hyperparameters for training, and a ModuleList of layer modules
 
 
 class Upsample(nn.Module):
@@ -112,8 +112,8 @@ class YOLOLayer(nn.Module):
         self.num_anchors = len(anchors)
         self.num_classes = num_classes
         self.ignore_thres = 0.5
-        self.mse_loss = nn.MSELoss()
-        self.bce_loss = nn.BCELoss()
+        self.mse_loss = nn.MSELoss() # mean squared error (squared L2 norm)
+        self.bce_loss = nn.BCELoss() # binary cross entropy 
         self.obj_scale = 1
         self.noobj_scale = 100
         self.metrics = {}
@@ -126,11 +126,11 @@ class YOLOLayer(nn.Module):
         FloatTensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
         self.stride = self.img_dim / self.grid_size
         # Calculate offsets for each grid
-        self.grid_x = torch.arange(g).repeat(g, 1).view([1, 1, g, g]).type(FloatTensor)
-        self.grid_y = torch.arange(g).repeat(g, 1).t().view([1, 1, g, g]).type(FloatTensor)
-        self.scaled_anchors = FloatTensor([(a_w / self.stride, a_h / self.stride) for a_w, a_h in self.anchors])
-        self.anchor_w = self.scaled_anchors[:, 0:1].view((1, self.num_anchors, 1, 1))
-        self.anchor_h = self.scaled_anchors[:, 1:2].view((1, self.num_anchors, 1, 1))
+        self.grid_x = torch.arange(g).repeat(g, 1).view([1, 1, g, g]).type(FloatTensor)     # shape = (1, 1, g, g)
+        self.grid_y = torch.arange(g).repeat(g, 1).t().view([1, 1, g, g]).type(FloatTensor) # shape = (1, 1, g, g)
+        self.scaled_anchors = FloatTensor([(a_w / self.stride, a_h / self.stride) for a_w, a_h in self.anchors]) # now the anchor size is related to the output grid, shape = (num_anchors, 2)
+        self.anchor_w = self.scaled_anchors[:, 0:1].view((1, self.num_anchors, 1, 1))       # shape = (1, num_anchors, 1, 1)
+        self.anchor_h = self.scaled_anchors[:, 1:2].view((1, self.num_anchors, 1, 1))       # shape = (1, num_anchors, 1, 1)
 
     def forward(self, x, targets=None, img_dim=None):
 
@@ -141,55 +141,55 @@ class YOLOLayer(nn.Module):
 
         self.img_dim = img_dim
         num_samples = x.size(0)
-        grid_size = x.size(2)
+        grid_size = x.size(2) # print x.shape  (batch_size, 255=3*(80+5), grid_size, grid_size)
 
         prediction = (
-            x.view(num_samples, self.num_anchors, self.num_classes + 5, grid_size, grid_size)
-            .permute(0, 1, 3, 4, 2)
+            x.view(num_samples, self.num_anchors, self.num_classes + 5, grid_size, grid_size) # the original shape should be (num_samples, C, grid_size, grid_size)
+            .permute(0, 1, 3, 4, 2) # current shape should be (num_samples, self.num_anchors, grid_size, grid_size, self.num_classes + 5)
             .contiguous()
         )
 
-        # Get outputs
-        x = torch.sigmoid(prediction[..., 0])  # Center x
-        y = torch.sigmoid(prediction[..., 1])  # Center y
-        w = prediction[..., 2]  # Width
-        h = prediction[..., 3]  # Height
-        pred_conf = torch.sigmoid(prediction[..., 4])  # Conf
-        pred_cls = torch.sigmoid(prediction[..., 5:])  # Cls pred.
+        # Get outputs (prediction[..., i] == prediction[:,:,:,:,i])
+        x = torch.sigmoid(prediction[..., 0])  # Center x, shape = (num_samples, self.num_anchors, grid_size, grid_size) i.e. sigmoid(tx)
+        y = torch.sigmoid(prediction[..., 1])  # Center y, shape = (num_samples, self.num_anchors, grid_size, grid_size) i.e. sigmoid(ty)
+        w = prediction[..., 2]  # Width,  shape = (num_samples, self.num_anchors, grid_size, grid_size) i.e. tw
+        h = prediction[..., 3]  # Height, shape = (num_samples, self.num_anchors, grid_size, grid_size) i.e. th
+        pred_conf = torch.sigmoid(prediction[..., 4])  # Conf, shape = (num_samples, self.num_anchors, grid_size, grid_size)
+        pred_cls = torch.sigmoid(prediction[..., 5:])  # Cls pred. shape = (num_samples, self.num_anchors, grid_size, grid_size, self.num_classes)
 
         # If grid size does not match current we compute new offsets
         if grid_size != self.grid_size:
             self.compute_grid_offsets(grid_size, cuda=x.is_cuda)
 
         # Add offset and scale with anchors
-        pred_boxes = FloatTensor(prediction[..., :4].shape)
+        pred_boxes = FloatTensor(prediction[..., :4].shape) # the shape of pred_boxes is (num_samples, self.num_anchors, grid_size, grid_size, 4)
         pred_boxes[..., 0] = x.data + self.grid_x
-        pred_boxes[..., 1] = y.data + self.grid_y
-        pred_boxes[..., 2] = torch.exp(w.data) * self.anchor_w
-        pred_boxes[..., 3] = torch.exp(h.data) * self.anchor_h
+        pred_boxes[..., 1] = y.data + self.grid_y # the x,y coords are related to the grid [0, grid_size]
+        pred_boxes[..., 2] = torch.exp(w.data) * self.anchor_w # self.anchor_w is related to the output grid
+        pred_boxes[..., 3] = torch.exp(h.data) * self.anchor_h # equivalent to Direct location prediction formulas in the paper YOLOv2/v3 (related to output grid)
 
         output = torch.cat(
             (
-                pred_boxes.view(num_samples, -1, 4) * self.stride,
+                pred_boxes.view(num_samples, -1, 4) * self.stride, # now the coordinates are related to the input image
                 pred_conf.view(num_samples, -1, 1),
                 pred_cls.view(num_samples, -1, self.num_classes),
             ),
             -1,
-        )
+        ) # the shape should be (num_samples, self.num_anchors*grid_size*grid_size, 5+self.num_classes)
 
         if targets is None:
             return output, 0
         else:
             iou_scores, class_mask, obj_mask, noobj_mask, tx, ty, tw, th, tcls, tconf = build_targets(
-                pred_boxes=pred_boxes,
-                pred_cls=pred_cls,
-                target=targets,
-                anchors=self.scaled_anchors,
-                ignore_thres=self.ignore_thres,
+                pred_boxes=pred_boxes, # (num_samples, self.num_anchors, grid_size, grid_size, 4)
+                pred_cls=pred_cls, # (num_samples, self.num_anchors, grid_size, grid_size, self.num_classes)
+                target=targets, # (num_samples*num_object', 6) each row [sample_index, class, x, y, w, h]
+                anchors=self.scaled_anchors, # (num_anchors, 2) each row w, h related to the output grid
+                ignore_thres=self.ignore_thres, # self.ignore_thres = 0.5
             )
 
             # Loss : Mask outputs to ignore non-existing objects (except with conf. loss)
-            loss_x = self.mse_loss(x[obj_mask], tx[obj_mask])
+            loss_x = self.mse_loss(x[obj_mask], tx[obj_mask]) 
             loss_y = self.mse_loss(y[obj_mask], ty[obj_mask])
             loss_w = self.mse_loss(w[obj_mask], tw[obj_mask])
             loss_h = self.mse_loss(h[obj_mask], th[obj_mask])
@@ -244,23 +244,23 @@ class Darknet(nn.Module):
         self.header_info = np.array([0, 0, 0, self.seen, 0], dtype=np.int32)
 
     def forward(self, x, targets=None):
-        img_dim = x.shape[2]
+        img_dim = x.shape[2] # (num_samples, num_channels, H, W)
         loss = 0
         layer_outputs, yolo_outputs = [], []
         for i, (module_def, module) in enumerate(zip(self.module_defs, self.module_list)):
             if module_def["type"] in ["convolutional", "upsample", "maxpool"]:
                 x = module(x)
             elif module_def["type"] == "route":
-                x = torch.cat([layer_outputs[int(layer_i)] for layer_i in module_def["layers"].split(",")], 1)
+                x = torch.cat([layer_outputs[int(layer_i)] for layer_i in module_def["layers"].split(",")], 1) # concat along the channel axis
             elif module_def["type"] == "shortcut":
                 layer_i = int(module_def["from"])
                 x = layer_outputs[-1] + layer_outputs[layer_i]
             elif module_def["type"] == "yolo":
-                x, layer_loss = module[0](x, targets, img_dim)
+                x, layer_loss = module[0](x, targets, img_dim) # multi-scale training
                 loss += layer_loss
                 yolo_outputs.append(x)
             layer_outputs.append(x)
-        yolo_outputs = to_cpu(torch.cat(yolo_outputs, 1))
+        yolo_outputs = to_cpu(torch.cat(yolo_outputs, 1)) # shape of the origianl yolo_outputs = (num_samples, num_anchors*g*g, 5+num_classes)
         return yolo_outputs if targets is None else (loss, yolo_outputs)
 
     def load_darknet_weights(self, weights_path):

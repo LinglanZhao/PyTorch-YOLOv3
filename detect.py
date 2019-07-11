@@ -57,9 +57,9 @@ if __name__ == "__main__":
         batch_size=opt.batch_size,
         shuffle=False,
         num_workers=opt.n_cpu,
-    )
+    ) # __getitem__ return: img_path, img
 
-    classes = load_classes(opt.class_path)  # Extracts class labels from file
+    classes = load_classes(opt.class_path)  # Extracts class labels from file, return a list of class names
 
     Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
 
@@ -74,8 +74,9 @@ if __name__ == "__main__":
 
         # Get detections
         with torch.no_grad():
-            detections = model(input_imgs)
-            detections = non_max_suppression(detections, opt.conf_thres, opt.nms_thres)
+            detections = model(input_imgs) # the shape of detections is (num_samples, multi-scale_positions, 5+num_classes)
+            detections = non_max_suppression(detections, opt.conf_thres, opt.nms_thres) # a list of detected results of shape (num_detected, 5+2) for each image 
+
 
         # Log progress
         current_time = time.time()
@@ -85,7 +86,7 @@ if __name__ == "__main__":
 
         # Save image and detections
         imgs.extend(img_paths)
-        img_detections.extend(detections)
+        img_detections.extend(detections) # a list of detected results of shape (num_detected, 4+2) for each image 
 
     # Bounding-box colors
     cmap = plt.get_cmap("tab20b")
@@ -106,7 +107,7 @@ if __name__ == "__main__":
         # Draw bounding boxes and labels of detections
         if detections is not None:
             # Rescale boxes to original image
-            detections = rescale_boxes(detections, opt.img_size, img.shape[:2])
+            detections = rescale_boxes(detections, opt.img_size, img.shape[:2]) # Rescales bounding boxes to the original shape
             unique_labels = detections[:, -1].cpu().unique()
             n_cls_preds = len(unique_labels)
             bbox_colors = random.sample(colors, n_cls_preds)

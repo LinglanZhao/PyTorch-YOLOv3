@@ -47,14 +47,14 @@ if __name__ == "__main__":
     os.makedirs("checkpoints", exist_ok=True)
 
     # Get data configuration
-    data_config = parse_data_config(opt.data_config)
-    train_path = data_config["train"]
-    valid_path = data_config["valid"]
-    class_names = load_classes(data_config["names"])
+    data_config = parse_data_config(opt.data_config) # a dictionary of data configs
+    train_path = data_config["train"] # "data/coco/trainvalno5k.txt"
+    valid_path = data_config["valid"] # "data/coco/5k.txt"
+    class_names = load_classes(data_config["names"]) # Extracts class labels from file, return a list of class names
 
     # Initiate model
     model = Darknet(opt.model_def).to(device)
-    model.apply(weights_init_normal)
+    model.apply(weights_init_normal) # apply(fn): Applies fn recursively to every submodule as well as self. Typical use includes initializing the parameters of a model
 
     # If specified we start from checkpoint
     if opt.pretrained_weights:
@@ -64,15 +64,15 @@ if __name__ == "__main__":
             model.load_darknet_weights(opt.pretrained_weights)
 
     # Get dataloader
-    dataset = ListDataset(train_path, augment=True, multiscale=opt.multiscale_training)
+    dataset = ListDataset(train_path, augment=True, multiscale=opt.multiscale_training) # __getitem__ return: img_path, img, targets
     dataloader = torch.utils.data.DataLoader(
         dataset,
-        batch_size=opt.batch_size,
+        batch_size=opt.batch_size,  
         shuffle=True,
         num_workers=opt.n_cpu,
         pin_memory=True,
-        collate_fn=dataset.collate_fn,
-    )
+        collate_fn=dataset.collate_fn, # merges a list of samples to form a mini-batch of Tensor(s).
+    ) # collate_fn return: a tuple of paths, (num_samples, c, h, w), (num_samples*num_object', 6) each row [sample_index, class, x, y, w, h]
 
     optimizer = torch.optim.Adam(model.parameters())
 
@@ -175,4 +175,4 @@ if __name__ == "__main__":
             print(f"---- mAP {AP.mean()}")
 
         if epoch % opt.checkpoint_interval == 0:
-            torch.save(model.state_dict(), f"checkpoints/yolov3_ckpt_%d.pth" % epoch)
+            torch.save(model.state_dict(), f"checkpoints/yolov3_ckpt_%d.pth" % epoch) # torch.save(net.state_dict(), PATH)
