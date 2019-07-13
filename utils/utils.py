@@ -232,8 +232,8 @@ def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.4):
     """
 
     # From (center x, center y, width, height) to (x1, y1, x2, y2)
-    prediction[..., :4] = xywh2xyxy(prediction[..., :4]) # the shape of prediction is (num_samples, 3*(num_anchors*g*g)', 5+num_classes)
-    output = [None for _ in range(len(prediction))]
+    prediction[..., :4] = xywh2xyxy(prediction[..., :4]) # the shape of prediction is (num_samples, 3*(num_anchors*g*g)', 5+num_classes) \
+    output = [None for _ in range(len(prediction))]      # for detection.py the shape is (1, 10647,85) = (1, (3*52*52+3*26*26+3*13*13), 5+80)
     for image_i, image_pred in enumerate(prediction): # the shape of image_pred is (3*(num_anchors*g*g)', 5+num_classes), loop over samples
         # Filter out confidence scores below threshold
         image_pred = image_pred[image_pred[:, 4] >= conf_thres] # the shape of image_pred is (num, 5+num_classes)
